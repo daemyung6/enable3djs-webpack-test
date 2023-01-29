@@ -38,7 +38,8 @@ class MainScene extends Scene3D {
          * https://sketchfab.com/3d-models/medieval-fantasy-book-06d5a80a04fc4c5ab552759e9a97d91a
          * Attribution 4.0 International (CC BY 4.0)
          */
-        const book = this.load.preload('book', '/assets/glb/test-world.glb')
+        const book = this.load.preload('book', '/assets/glb/test-world1.glb')
+        // const book = this.load.preload('book', '/assets/glb/book.glb')
 
         /**
          * box_man.glb by Jan Bláha
@@ -101,12 +102,8 @@ class MainScene extends Scene3D {
 
             worldScene.traverse(child => {
                 if(child.userData.name === 'event.001') {
-                    let body = this.physics.add.existing(child, {
-                        shape: 'concave',
-                        mass: 0,
-                        collisionFlags: 0,
-                        autoCenter: false
-                    })
+                    const size = 100;
+                    let body = this.physics.add.existing(child,)
                     console.log('body', body)
                     this.event001 = child
                     return
