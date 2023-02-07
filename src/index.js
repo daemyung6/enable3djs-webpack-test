@@ -6,8 +6,9 @@ import {
     THREE,
     JoyStick,
     ThirdPersonControls,
-} from 'enable3d';
 
+} from 'enable3d';
+import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer' 
 
 /**
  * Is touch device?
@@ -29,7 +30,10 @@ class MainScene extends Scene3D {
         this.moveTop = 0
         this.moveRight = 0
 
-        this.event001 = 1
+        this.event001 = false;
+        this.isevent001 = false;
+
+        this.text = {};
     }
 
     async preload() {
@@ -38,7 +42,7 @@ class MainScene extends Scene3D {
          * https://sketchfab.com/3d-models/medieval-fantasy-book-06d5a80a04fc4c5ab552759e9a97d91a
          * Attribution 4.0 International (CC BY 4.0)
          */
-        const book = this.load.preload('book', '/assets/glb/test-world1.glb')
+        const book = this.load.preload('book', '/assets/glb/test-world6.glb')
         // const book = this.load.preload('book', '/assets/glb/book.glb')
 
         /**
@@ -60,7 +64,7 @@ class MainScene extends Scene3D {
         ambientLight.intensity = intensity
         directionalLight.intensity = intensity
 
-        // this.physics.debug.enable()
+        this.physics.debug.enable()
 
         let isDebug = false;
         const that = this;
@@ -81,7 +85,6 @@ class MainScene extends Scene3D {
             const object = await this.load.gltf('book')
             const scene = object.scenes[0]
 
-            
 
             const worldScene = new ExtendedObject3D()
             worldScene.name = 'scene'
@@ -101,19 +104,35 @@ class MainScene extends Scene3D {
 
 
             worldScene.traverse(child => {
-                if(child.userData.name === 'event.001') {
-                    const size = 100;
-                    let body = this.physics.add.existing(child,)
-                    console.log('body', body)
-                    this.event001 = child
-                    return
-                }
+                console.log(child.name)
                 if (child.isMesh) {
-                    child.castShadow = child.receiveShadow = false
-                    child.material.metalness = 0
-                    child.material.roughness = 1
-
+                    if (child.name === 'text-in') {
+                        this.text.in = child;
+                        return
+                    }
+                    if (child.name === 'text-out') {
+                        this.text.out = child;
+                        return
+                    }
+                    if (/event/i.test(child.name)) {
+                        this.physics.add.existing(child, {
+                            shape: 'concave',
+                            mass: 0,
+                            collisionFlags: 4,
+                            autoCenter: false
+                        })
+                        child.body.on.collision(data => {
+                            if(this.man === data) {
+                                this.event001 = true;
+                            }
+                        })
+                        child.visible = false;
+                        return
+                    }
                     if (/mesh/i.test(child.name)) {
+                        child.castShadow = child.receiveShadow = false
+                        child.material.metalness = 0
+                        child.material.roughness = 1
                         this.physics.add.existing(child, {
                             shape: 'concave',
                             mass: 0,
@@ -122,6 +141,16 @@ class MainScene extends Scene3D {
                         })
                         child.body.setAngularFactor(0, 0, 0)
                         child.body.setLinearFactor(0, 0, 0)
+                        return;
+                    }
+                    if (/obj/i.test(child.name)) {
+                        this.physics.add.existing(child, {
+                            shape: 'box',
+                            width: 2,
+                            height: 2,
+                            depth: 2
+                        })
+                        return;
                     }
                 }
             })
@@ -130,8 +159,8 @@ class MainScene extends Scene3D {
         
         const addMan = async () => {
             const object = await this.load.gltf('man')
-            const man = object.scene.children[0]
-
+            const man = object.scene.children[0];
+            
             this.man = new ExtendedObject3D()
             this.man.name = 'man'
             this.man.rotateY(Math.PI + 0.1) // a hack
@@ -165,12 +194,14 @@ class MainScene extends Scene3D {
              * Add the player to the scene with a body
              */
             this.add.existing(this.man)
-            this.physics.add.existing(this.man, {
-                shape: 'sphere',
+            let t = this.physics.add.existing(this.man, {
+                shape: 'capsule',
                 radius: 0.25,
                 width: 0.5,
-                offset: { y: -0.25 }
+                height: 0.4,
+                offset: { y: -0.5 }
             })
+
             this.man.body.setFriction(0.8)
             this.man.body.setAngularFactor(0, 0, 0)
 
@@ -210,14 +241,47 @@ class MainScene extends Scene3D {
                 })
 
                 document.addEventListener('pointerlockchange', (e) => {
-                    islock = document.body === document.pointerLockElement
-                    console.log('Pointer lock changed');
+                    islock = document.body === document.pointerLockElement;
                 });
             }
         }
 
+        const video = async () => {
+            function Element( id, x, y, z, ry ) {
+				const div = document.createElement( 'div' );
+				div.style.width = '480px';
+				div.style.height = '360px';
+				div.style.backgroundColor = '#000';
+
+				const iframe = document.createElement( 'iframe' );
+				iframe.style.width = '480px';
+				iframe.style.height = '360px';
+				iframe.style.border = '0px';
+				iframe.src = [ 'https://www.youtube.com/embed/', id, '?rel=0' ].join( '' );
+				div.appendChild( iframe );
+
+				const object = new CSS3DObject( div );
+				object.position.set( x, y, z );
+				object.rotation.y = ry;
+
+				return object;
+			}
+
+            const obj = new ExtendedObject3D()
+            obj.name = 'video'
+            const v = new Element( 'SJOz3qjfQXU', 0, 0, 240, 0 );
+            obj.add(v)
+            this.add.existing(obj)
+            console.log(v)
+        }
+
         addBook()
-        addMan()
+        addMan();
+        // video();
+
+
+        
+        
 
         /**
          * Add Keys
@@ -227,7 +291,7 @@ class MainScene extends Scene3D {
             a: { isDown: false },
             s: { isDown: false },
             d: { isDown: false },
-            space: { isDown: false }
+            space: { isDown: false },
         }
 
         const press = (e, isDown) => {
@@ -343,6 +407,19 @@ class MainScene extends Scene3D {
             if (this.keys.space.isDown && this.canJump) {
                 this.jump()
             }
+
+            if(this.event001 && !this.isevent001) {
+                this.isevent001 = true
+            }
+            if(this.isevent001 && !this.event001) {
+                this.isevent001 = false;
+            }
+            if(this.text.in && this.text.out) {
+                this.text.in.visible = this.event001;
+                this.text.out.visible = !this.event001;
+            }
+
+            this.event001 = false;
         }
     }
 }
