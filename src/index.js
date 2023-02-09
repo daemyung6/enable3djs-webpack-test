@@ -8,7 +8,6 @@ import {
     ThirdPersonControls,
 
 } from 'enable3d';
-import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer' 
 
 /**
  * Is touch device?
@@ -20,7 +19,7 @@ class MainScene extends Scene3D {
         super('MainScene')
     }
 
-    
+
     init() {
         this.renderer.setPixelRatio(Math.max(1, window.devicePixelRatio / 2))
 
@@ -34,25 +33,25 @@ class MainScene extends Scene3D {
         this.isevent001 = false;
 
         this.text = {};
+
+        this.meshArr = [];
+        this.videoObjArr = [];
+        this.isVideoOver = false;
+
+        this.isMove = false;
+        this.moveToPostion = {};
+        this.moveToObj = null;
+
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        })
     }
 
     async preload() {
-        /**
-         * Medieval Fantasy Book by Pixel (https://sketchfab.com/stefan.lengyel1)
-         * https://sketchfab.com/3d-models/medieval-fantasy-book-06d5a80a04fc4c5ab552759e9a97d91a
-         * Attribution 4.0 International (CC BY 4.0)
-         */
-        const book = this.load.preload('book', '/assets/glb/test-world6.glb')
-        // const book = this.load.preload('book', '/assets/glb/book.glb')
-
-        /**
-         * box_man.glb by Jan Bláha
-         * https://github.com/swift502/Sketchbook
-         * CC-0 license 2018
-         */
+        const world = this.load.preload('world', '/assets/glb/test-world7.glb');
         const man = this.load.preload('man', '/assets/glb/box_man.glb')
 
-        await Promise.all([book, man])
+        await Promise.all([world, man])
     }
 
     async create() {
@@ -68,9 +67,9 @@ class MainScene extends Scene3D {
 
         let isDebug = false;
         const that = this;
-        window.addEventListener('keydown', function(e) {
-            if(e.key === 'e') {
-                if(!isDebug) {
+        window.addEventListener('keydown', function (e) {
+            if (e.key === 'e') {
+                if (!isDebug) {
                     that.physics.debug.enable()
                 }
                 else {
@@ -81,10 +80,9 @@ class MainScene extends Scene3D {
         })
 
 
-        const addBook = async () => {
-            const object = await this.load.gltf('book')
-            const scene = object.scenes[0]
-
+        const addWorld = async () => {
+            const object = await this.load.gltf('world')
+            const scene = object.scenes[0];
 
             const worldScene = new ExtendedObject3D()
             worldScene.name = 'scene'
@@ -101,10 +99,7 @@ class MainScene extends Scene3D {
                 worldScene.action[i].play()
             })
 
-
-
             worldScene.traverse(child => {
-                console.log(child.name)
                 if (child.isMesh) {
                     if (child.name === 'text-in') {
                         this.text.in = child;
@@ -121,8 +116,9 @@ class MainScene extends Scene3D {
                             collisionFlags: 4,
                             autoCenter: false
                         })
+                        console.log(child.body)
                         child.body.on.collision(data => {
-                            if(this.man === data) {
+                            if (this.man === data) {
                                 this.event001 = true;
                             }
                         })
@@ -141,14 +137,13 @@ class MainScene extends Scene3D {
                         })
                         child.body.setAngularFactor(0, 0, 0)
                         child.body.setLinearFactor(0, 0, 0)
+
+                        this.meshArr.push(child);
                         return;
                     }
                     if (/obj/i.test(child.name)) {
                         this.physics.add.existing(child, {
-                            shape: 'box',
-                            width: 2,
-                            height: 2,
-                            depth: 2
+                            shape: 'convex',
                         })
                         return;
                     }
@@ -156,11 +151,11 @@ class MainScene extends Scene3D {
             })
         }
 
-        
+
         const addMan = async () => {
             const object = await this.load.gltf('man')
             const man = object.scene.children[0];
-            
+
             this.man = new ExtendedObject3D()
             this.man.name = 'man'
             this.man.rotateY(Math.PI + 0.1) // a hack
@@ -181,14 +176,14 @@ class MainScene extends Scene3D {
              * Animations
              */
             // ad the box man's animation mixer to the animationMixers array (for auto updates)
-            this.animationMixers.add(this.man.animation.mixer)
+            this.animationMixers.add(this.man.anims.mixer)
 
             object.animations.forEach(animation => {
                 if (animation.name) {
-                    this.man.animation.add(animation.name, animation)
+                    this.man.anims.add(animation.name, animation)
                 }
             })
-            this.man.animation.play('idle')
+            this.man.anims.play('idle')
 
             /**
              * Add the player to the scene with a body
@@ -223,65 +218,148 @@ class MainScene extends Scene3D {
              * Add Pointer Lock and Pointer Drag
              */
             if (!isTouchDevice) {
-                const that = this;
-                let islock = false;
-                window.addEventListener("click", async () => {
-                    try {
-                        document.body.requestPointerLock()
-                    } catch (error) {
-                        console.log('requestPointerLock fail')
-                    }
-                });
+                // const that = this;
+                // let islock = false;
+                // window.addEventListener("click", async () => {
+                //     try {
+                //         document.body.requestPointerLock()
+                //     } catch (error) {
+                //         console.log('requestPointerLock fail')
+                //     }
+                // });
+                // window.addEventListener('pointermove', function(e) {
+                //     if(!islock) { return }
 
-                window.addEventListener('pointermove', function(e) {
-                    if(!islock) { return }
+                //     that.moveTop = -e.movementY
+                //     that.moveRight = e.movementX
+                // })
 
-                    that.moveTop = -e.movementY
-                    that.moveRight = e.movementX
+                // document.addEventListener('pointerlockchange', (e) => {
+                //     islock = document.body === document.pointerLockElement;
+                // });
+                let isPress = false;
+                window.addEventListener('mousedown', e => {
+                    isPress = true;
+                })
+                window.addEventListener('mouseup', e => {
+                    isPress = false;
+                })
+                window.addEventListener('mouseleave', e => {
+                    isPress = false;
                 })
 
-                document.addEventListener('pointerlockchange', (e) => {
-                    islock = document.body === document.pointerLockElement;
-                });
+                window.addEventListener('mousemove', e => {
+                    if(!isPress) { return }
+
+                    this.moveTop = -e.movementY;
+                    this.moveRight = -e.movementX;
+                })
             }
         }
 
-        const video = async () => {
-            function Element( id, x, y, z, ry ) {
-				const div = document.createElement( 'div' );
-				div.style.width = '480px';
-				div.style.height = '360px';
-				div.style.backgroundColor = '#000';
+        const video = () => {
+            const video = document.createElement('video');
+            video.src = "/assets/video/test.mp4";
+            document.body.appendChild(video);
+            video.style.cssText = `display: none;`
+            video.currentTime = 1;
 
-				const iframe = document.createElement( 'iframe' );
-				iframe.style.width = '480px';
-				iframe.style.height = '360px';
-				iframe.style.border = '0px';
-				iframe.src = [ 'https://www.youtube.com/embed/', id, '?rel=0' ].join( '' );
-				div.appendChild( iframe );
+            video.setAttribute('controls', '');
+            video.setAttribute('loop', '');
+            const texture = new THREE.VideoTexture(video);
 
-				const object = new CSS3DObject( div );
-				object.position.set( x, y, z );
-				object.rotation.y = ry;
+            window.addEventListener('click', () => {
+                if(this.isVideoOver && video.paused) {
+                    video.play();
+                    return
+                }
+                if(this.isVideoOver && !video.paused) {
+                    video.pause();
+                    return
+                }
+            });
 
-				return object;
-			}
 
-            const obj = new ExtendedObject3D()
-            obj.name = 'video'
-            const v = new Element( 'SJOz3qjfQXU', 0, 0, 240, 0 );
-            obj.add(v)
-            this.add.existing(obj)
-            console.log(v)
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: texture });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.y = 1;
+            cube.position.x = -4;
+
+            this.physics.add.existing(cube, {
+                shape: 'convex',
+            })
+
+            this.scene.add(cube);
+            this.videoObjArr.push(cube)
+
+
         }
 
-        addBook()
+        const Raycaster = () => {
+            const pointer = new THREE.Vector2();
+            const raycaster = new THREE.Raycaster();
+
+            const size = 0.2
+            const geometry = new THREE.BoxGeometry(size, size, size);
+            const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const cube = new THREE.Mesh(geometry, material);
+
+            this.scene.add(cube);
+
+            let point;
+
+            const onMouseMove = (event) => {
+                pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+                pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(pointer, this.camera);
+                const intersectsMesh = raycaster.intersectObjects(this.meshArr);
+                if(intersectsMesh.length > 0) { 
+                    cube.position.x = intersectsMesh[0].point.x
+                    cube.position.y = intersectsMesh[0].point.y
+                    cube.position.z = intersectsMesh[0].point.z
+
+                    point = intersectsMesh[0].point;
+                }
+
+                const clickEvent = raycaster.intersectObjects(this.videoObjArr);
+                this.isVideoOver = clickEvent.length > 0;
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mousedown', (e) => {
+                if(e.button !== 2) { return }
+
+                if(this.moveToObj !== null) {
+                    this.scene.remove(this.moveToObj)
+                }
+                this.isMove = true;
+                this.moveToPostion = {
+                    x: point.x,
+                    y: point.y,
+                    z: point.z,
+                }
+                const size = 0.2
+                const geometry = new THREE.BoxGeometry(size, size, size);
+                const material = new THREE.MeshLambertMaterial({ color: 0xff8100 });
+                const cube = new THREE.Mesh(geometry, material);
+                cube.position.x = point.x
+                cube.position.y = point.y
+                cube.position.z = point.z
+
+                this.scene.add(cube);
+                this.moveToObj = cube;
+                
+            });
+        }
+
+
+        addWorld().then(Raycaster)
         addMan();
-        // video();
+        video();
 
 
-        
-        
 
         /**
          * Add Keys
@@ -348,10 +426,10 @@ class MainScene extends Scene3D {
     jump() {
         if (!this.man || !this.canJump) return
         this.canJump = false
-        this.man.animation.play('jump_running', 500, false)
+        this.man.anims.play('jump_running', 500, false)
         setTimeout(() => {
             this.canJump = true
-            this.man.animation.play('idle', 500)
+            this.man.anims.play('idle', 500)
         }, 500)
         this.man.body.applyForceY(6)
     }
@@ -390,7 +468,7 @@ class MainScene extends Scene3D {
              * Player Move
              */
             if (this.keys.w.isDown || this.move) {
-                if (this.man.animation.current === 'idle' && this.canJump) this.man.animation.play('run')
+                if (this.man.anims.current === 'idle' && this.canJump) this.man.anims.play('run')
 
                 const x = Math.sin(theta) * speed,
                     y = this.man.body.velocity.y,
@@ -398,7 +476,7 @@ class MainScene extends Scene3D {
 
                 this.man.body.setVelocity(x, y, z)
             } else {
-                if (this.man.animation.current === 'run' && this.canJump) this.man.animation.play('idle')
+                if (this.man.anims.current === 'run' && this.canJump) this.man.anims.play('idle')
             }
 
             /**
@@ -408,18 +486,50 @@ class MainScene extends Scene3D {
                 this.jump()
             }
 
-            if(this.event001 && !this.isevent001) {
+            if (this.event001 && !this.isevent001) {
                 this.isevent001 = true
             }
-            if(this.isevent001 && !this.event001) {
+            if (this.isevent001 && !this.event001) {
                 this.isevent001 = false;
             }
-            if(this.text.in && this.text.out) {
+            if (this.text.in && this.text.out) {
                 this.text.in.visible = this.event001;
                 this.text.out.visible = !this.event001;
             }
 
             this.event001 = false;
+
+            if(this.isMove) {
+                let disZ = this.moveToPostion.z - this.man.body.position.z;
+                disZ *= disZ < 0 ? -1 : 1;
+
+                let disX = this.moveToPostion.x - this.man.body.position.x;
+                disX *= disX < 0 ? -1 : 1;
+
+                if(
+                    (disZ < 0.1) &&
+                    (disX < 0.1)
+                ) {
+                    this.isMove = false;
+                    return;
+                }
+
+                let angle = Math.atan2(
+                    (this.moveToPostion.z - this.man.body.position.z),
+                    (this.moveToPostion.x - this.man.body.position.x)
+                )
+
+
+                let x = Math.cos(angle) * 2;
+                let y = this.man.body.velocity.y;
+                let z = Math.sin(angle) * 2;
+
+
+                // console.log(angle * Math.PI / 180, x, y, z)
+
+                this.man.body.setVelocity(x, y, z)
+            }
+            console.log(this.man.body.rotation)
         }
     }
 }
@@ -427,10 +537,6 @@ class MainScene extends Scene3D {
 window.addEventListener('load', () => {
     PhysicsLoader('/lib/ammo/moz', () => {
         const project = new Project({ antialias: true, maxSubSteps: 10, fixedTimeStep: 1 / 120, scenes: [MainScene] })
-
-        //   const destination = document.getElementById('welcome-game')
-        //   destination.appendChild(project.canvas)
-
 
         const resize = () => {
             const newWidth = window.innerWidth
