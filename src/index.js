@@ -45,11 +45,13 @@ class MainScene extends Scene3D {
         this.canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         })
+
+        this.lastPosition = {x: 0, y: 0, z: 0};
     }
 
     async preload() {
-        const world = this.load.preload('world', '/assets/glb/test-world7.glb');
-        const man = this.load.preload('man', '/assets/glb/box_man.glb')
+        const world = this.load.preload('world', './assets/glb/test-world.glb');
+        const man = this.load.preload('man', './assets/glb/box_man.glb')
 
         await Promise.all([world, man])
     }
@@ -78,6 +80,15 @@ class MainScene extends Scene3D {
                 isDebug = !isDebug;
             }
         })
+
+        // this.log = document.createElement('div');
+        // document.body.appendChild(this.log);
+        // this.log.style.cssText = `
+        //     position: absolute;
+        //     padding: 10px;
+        //     background: white;
+        //     top: 0px;
+        // `
 
 
         const addWorld = async () => {
@@ -259,9 +270,7 @@ class MainScene extends Scene3D {
 
         const video = () => {
             const video = document.createElement('video');
-            video.src = "/assets/video/test.mp4";
-            document.body.appendChild(video);
-            video.style.cssText = `display: none;`
+            video.src = "./assets/video/test.mp4";
             video.currentTime = 1;
 
             video.setAttribute('controls', '');
@@ -326,15 +335,17 @@ class MainScene extends Scene3D {
                 const clickEvent = raycaster.intersectObjects(this.videoObjArr);
                 this.isVideoOver = clickEvent.length > 0;
             };
-
             window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mousedown', (e) => {
+
+            
+            const onDown = (e) => {
                 if(e.button !== 2) { return }
 
                 if(this.moveToObj !== null) {
                     this.scene.remove(this.moveToObj)
                 }
                 this.isMove = true;
+                this.man.anims.play('run')
                 this.moveToPostion = {
                     x: point.x,
                     y: point.y,
@@ -350,7 +361,14 @@ class MainScene extends Scene3D {
 
                 this.scene.add(cube);
                 this.moveToObj = cube;
-                
+            }
+            
+            window.addEventListener('mousedown', onDown);
+            window.addEventListener('touchmove', (e) => {
+                console.log(e)
+                e.clientX = e.touches[0].x;
+                e.clientY = e.touches[0].y;
+                onMouseMove(e);
             });
         }
 
@@ -358,7 +376,6 @@ class MainScene extends Scene3D {
         addWorld().then(Raycaster)
         addMan();
         video();
-
 
 
         /**
@@ -369,6 +386,7 @@ class MainScene extends Scene3D {
             a: { isDown: false },
             s: { isDown: false },
             d: { isDown: false },
+            v: { isDown: false },
             space: { isDown: false },
         }
 
@@ -384,6 +402,9 @@ class MainScene extends Scene3D {
                     break
                 case 32: // space
                     this.keys.space.isDown = isDown
+                    break
+                case 86: // space
+                    this.keys.v.isDown = isDown
                     break
             }
         }
@@ -434,17 +455,21 @@ class MainScene extends Scene3D {
         this.man.body.applyForceY(6)
     }
 
-    update(time, delta) {
+    radiusNormalize(v) {
+        v = v % (Math.PI * 2);
+        if(v < 0) {
+            v = (Math.PI * 2) + v;
+        }
+        return v;
+    }
 
+
+    update(time, delta) {
         if (this.man && this.man.body) {
-            /**
-             * Update Controls
-             */
+
             this.controls.update(this.moveRight * 3, -this.moveTop * 3)
             if (!isTouchDevice) this.moveRight = this.moveTop = 0
-            /**
-             * Player Turn
-             */
+
             const speed = 4
             const v3 = new THREE.Vector3()
 
@@ -454,20 +479,47 @@ class MainScene extends Scene3D {
             const thetaMan = Math.atan2(rotationMan.x, rotationMan.z)
             this.man.body.setAngularVelocityY(0)
 
-            const l = Math.abs(theta - thetaMan)
-            let rotationSpeed = isTouchDevice ? 2 : 4
-            let d = Math.PI / 24
+            // this.log.innerText = `speed: ${nowSpeed} \n` + 
+            // 'last pos:' + JSON.stringify(this.lastPosition) + '\n' + 
+            // 'now  pos:' + JSON.stringify(this.man.body.position)
 
-            if (l > d) {
-                if (l > Math.PI - d) rotationSpeed *= -1
-                if (theta < thetaMan) rotationSpeed *= -1
-                this.man.body.setAngularVelocityY(rotationSpeed)
+
+            if(this.isMove) {
+                const theta = this.radiusNormalize(
+                    Math.atan2(
+                        (this.moveToPostion.x - this.man.body.position.x),
+                        (this.moveToPostion.z - this.man.body.position.z),
+                    )
+                )
+                const thetaMan = this.radiusNormalize(this.man.body.rotation.y);
+                
+                const l = Math.abs(theta - thetaMan)
+                let rotationSpeed = 4
+                let d = Math.PI / 24
+                
+                if (l > d) {
+                    if (l > Math.PI - d) rotationSpeed *= -1
+                    if (theta < thetaMan) rotationSpeed *= -1
+                    this.man.body.setAngularVelocityY(rotationSpeed)
+                }
             }
+            else {
+                const l = Math.abs(theta - thetaMan)
+                let rotationSpeed = isTouchDevice ? 2 : 4
+                let d = Math.PI / 24
+    
+                if (l > d) {
+                    if (l > Math.PI - d) rotationSpeed *= -1
+                    if (theta < thetaMan) rotationSpeed *= -1
+                    this.man.body.setAngularVelocityY(rotationSpeed)
+                }
+            }
+            
 
             /**
              * Player Move
              */
-            if (this.keys.w.isDown || this.move) {
+            if (this.keys.w.isDown || this.move) { 
                 if (this.man.anims.current === 'idle' && this.canJump) this.man.anims.play('run')
 
                 const x = Math.sin(theta) * speed,
@@ -475,8 +527,9 @@ class MainScene extends Scene3D {
                     z = Math.cos(theta) * speed
 
                 this.man.body.setVelocity(x, y, z)
+                this.isMove = false;
             } else {
-                if (this.man.anims.current === 'run' && this.canJump) this.man.anims.play('idle')
+                if (this.man.anims.current === 'run' && this.canJump && !this.isMove) this.man.anims.play('idle')
             }
 
             /**
@@ -500,6 +553,10 @@ class MainScene extends Scene3D {
             this.event001 = false;
 
             if(this.isMove) {
+                const theta = Math.atan2(
+                    (this.moveToPostion.z - this.man.body.position.z),
+                    (this.moveToPostion.x - this.man.body.position.x)
+                )
                 let disZ = this.moveToPostion.z - this.man.body.position.z;
                 disZ *= disZ < 0 ? -1 : 1;
 
@@ -511,31 +568,28 @@ class MainScene extends Scene3D {
                     (disX < 0.1)
                 ) {
                     this.isMove = false;
+                    this.man.body.setVelocity(0, 0, 0)
+                    this.scene.remove(this.moveToObj);
                     return;
                 }
 
-                let angle = Math.atan2(
-                    (this.moveToPostion.z - this.man.body.position.z),
-                    (this.moveToPostion.x - this.man.body.position.x)
-                )
-
-
-                let x = Math.cos(angle) * 2;
+                let x = Math.cos(theta) * 2;
                 let y = this.man.body.velocity.y;
-                let z = Math.sin(angle) * 2;
+                let z = Math.sin(theta) * 2;
 
-
-                // console.log(angle * Math.PI / 180, x, y, z)
-
+            
                 this.man.body.setVelocity(x, y, z)
             }
-            console.log(this.man.body.rotation)
+
+            this.lastPosition.x = this.man.position.x;
+            this.lastPosition.y = this.man.position.y;
+            this.lastPosition.z = this.man.position.z;
         }
     }
 }
 
 window.addEventListener('load', () => {
-    PhysicsLoader('/lib/ammo/moz', () => {
+    PhysicsLoader('./lib/ammo/moz', () => {
         const project = new Project({ antialias: true, maxSubSteps: 10, fixedTimeStep: 1 / 120, scenes: [MainScene] })
 
         const resize = () => {
