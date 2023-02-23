@@ -51,21 +51,20 @@ class MainScene extends Scene3D {
 
     async preload() {
         const world = this.load.preload('world', './assets/glb/test-world.glb');
-        const man = this.load.preload('man', './assets/glb/box_man.glb')
-
-        await Promise.all([world, man])
+        const house = this.load.preload('house', './assets/glb/house.glb');
+        const man = this.load.preload('man', './assets/glb/monkeyCharacter.glb')
+        
+        await Promise.all([world, man, house])
     }
 
     async create() {
-        const { lights } = await this.warpSpeed('-ground', '-orbitControls')
+        const { lights } = await this.warpSpeed('-ground', '-orbitControls', 'light', 'sky')
+        const { hemisphereLight, ambientLight, directionalLight } = lights;
+        hemisphereLight.intensity = 0;
+        ambientLight.intensity = 0.6;
+        directionalLight.intensity = 1;
 
-        const { hemisphereLight, ambientLight, directionalLight } = lights
-        const intensity = 0.65
-        hemisphereLight.intensity = intensity
-        ambientLight.intensity = intensity
-        directionalLight.intensity = intensity
-
-        this.physics.debug.enable()
+        // this.physics.debug.enable()
 
         let isDebug = false;
         const that = this;
@@ -89,6 +88,28 @@ class MainScene extends Scene3D {
         //     background: white;
         //     top: 0px;
         // `
+
+
+        const addHouse = async () => {
+            const object = await this.load.gltf('house')
+            const scene = object.scenes[0];
+            scene.scale.setScalar(0.005)
+
+            console.log('집', object)
+
+            const worldScene = new ExtendedObject3D()
+            worldScene.add(scene)
+            this.add.existing(worldScene)
+
+            worldScene.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = child.receiveShadow = false
+                    child.material.metalness = 0
+                    child.material.roughness = 0.4
+                    return;
+                }
+            })
+        }
 
 
         const addWorld = async () => {
@@ -165,7 +186,19 @@ class MainScene extends Scene3D {
 
         const addMan = async () => {
             const object = await this.load.gltf('man')
+            
             const man = object.scene.children[0];
+            man.scale.setScalar(0.005)
+
+            let animationNames = ['idle', 'jump', 'run', 'jap'];
+            for (let i = 0; i < object.animations.length; i++) {
+                for (let j = 0; j < animationNames.length; j++) {
+                    if(object.animations[i].name.indexOf(animationNames[j]) !== -1 ) {
+                        object.animations[i].name = animationNames[j];
+                    }
+                }
+            }
+            console.log(object);
 
             this.man = new ExtendedObject3D()
             this.man.name = 'man'
@@ -376,6 +409,7 @@ class MainScene extends Scene3D {
         addWorld().then(Raycaster)
         addMan();
         video();
+        addHouse()
 
 
         /**
@@ -387,6 +421,7 @@ class MainScene extends Scene3D {
             s: { isDown: false },
             d: { isDown: false },
             v: { isDown: false },
+            f: { isDown: false },
             space: { isDown: false },
         }
 
@@ -405,6 +440,9 @@ class MainScene extends Scene3D {
                     break
                 case 86: // space
                     this.keys.v.isDown = isDown
+                    break
+                case 70: // space
+                    this.keys.f.isDown = isDown
                     break
             }
         }
@@ -447,7 +485,7 @@ class MainScene extends Scene3D {
     jump() {
         if (!this.man || !this.canJump) return
         this.canJump = false
-        this.man.anims.play('jump_running', 500, false)
+        this.man.anims.play('jump', 500, false)
         setTimeout(() => {
             this.canJump = true
             this.man.anims.play('idle', 500)
@@ -479,9 +517,6 @@ class MainScene extends Scene3D {
             const thetaMan = Math.atan2(rotationMan.x, rotationMan.z)
             this.man.body.setAngularVelocityY(0)
 
-            // this.log.innerText = `speed: ${nowSpeed} \n` + 
-            // 'last pos:' + JSON.stringify(this.lastPosition) + '\n' + 
-            // 'now  pos:' + JSON.stringify(this.man.body.position)
 
 
             if(this.isMove) {
@@ -579,6 +614,16 @@ class MainScene extends Scene3D {
 
             
                 this.man.body.setVelocity(x, y, z)
+            }
+
+            if(this.keys.f.isDown) {
+                if (this.man.anims.current === 'jap' ) { return }
+                this.man.anims.play('jap')
+                setTimeout(() => {
+                    if (this.man.anims.current === 'jap' ) {
+                        this.man.anims.play('idle')
+                    }
+                }, 1000)
             }
 
             this.lastPosition.x = this.man.position.x;
